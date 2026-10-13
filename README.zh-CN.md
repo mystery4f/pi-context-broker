@@ -10,6 +10,8 @@ $design-review review this API boundary
 
 插件会找到 `design-review`，注入匹配的本地 `SKILL.md` 或上下文包索引，并在同一个 active session branch 里避免重复注入。
 
+去重检查当前分支的有效上下文。再次补全并提交同一记录，只会提示 `already loaded`；fork 保留正文时仍跳过，回退或压缩移除正文后会重新加载。普通用户、助手或工具消息里的 XML 示例不算加载证据。去重避免追加第二份正文；已加载的正文仍随会话上下文发送给模型。
+
 ## 它解决什么问题
 
 Agent 环境用久了以后，会积累很多有用上下文：评审清单、项目 runbook、团队流程、provider 说明、调试方法和个人 skill。全部常驻 prompt 会很吵；让模型自己记住文件名不稳定；每次手动打开文件又打断节奏。
@@ -21,7 +23,7 @@ Context Broker 在你的 prompt 和本地上下文库之间加了一层很小的
 ## 你会得到什么
 
 - 用 `$name` 查找本地 skill 和 catalog 记录。
-- Pi 交互模式下支持 `$...` 自动补全。
+- Pi 和 OMP 交互模式下支持 `$...` 自动候选下拉。
 - 支持规则注入，比如 `review this design` 加载 `design-review`。
 - 支持显式 `bundle:<name>` 规则目标，用关键词触发 Bundle 索引。
 - 支持 bundle，适合大型上下文区域先给模型一个索引。
@@ -58,12 +60,41 @@ OMP：
 omp install npm:pi-context-broker
 ```
 
+安装、升级或修改 OMP 扩展代码后，在 OMP 输入框执行 `/restart`：重启进程、保留启动参数并恢复当前会话。OMP 18.10.3 没有 `/reload`；`/reload-plugins` 只刷新 Skill、命令、Agent 和 MCP 等发现状态，不重新执行已加载的扩展代码。`tern plugin reload` 只重载 Tern 配套插件，不重启 OMP。
+
 不安装，直接试本地 checkout：
 
 ```bash
-pi -e ./src/index.ts
-omp -e ./src/index.ts
+pi -e ./packages/context-broker/src/index.ts
+omp -e ./packages/context-broker/src/index.ts
 ```
+
+### Tern 补全
+
+在 OMP 输入框任意位置输入 `$` 或 `$前缀`，broker 自动显示光标旁的 Skill/Bundle 候选下拉，与 `/` 补全共用原生编辑器 UI。可以紧接正文输入，也可以在一段话中连续插入多个记录，例如 `先使用$design-review 再用$workspace-collab`。继续输入筛选，方向键选择，Tab 或 Enter 接受，Esc 关闭；接受只补全草稿，不提交 prompt。自动下拉由 OMP 插件提供，不需要 Tern 配套插件。
+
+接受候选后显示带图标的原生原子胶囊，使用与 `/skill:` 相同的颜色和编辑行为，保留 `$name` 以区分 broker 调用。Backspace 删除整颗胶囊，撤销可恢复；提交时展开回 `$name`，由 broker 加载所有匹配 Skill 或 Bundle。原有 `/skill:` 胶囊可与它共存。
+
+OMP 自动下拉需要 OMP 18.10.3+，在 Tern 中会渲染为输入框旁的原生下拉。可选的 Tern 配套插件提供 **Ctrl+Alt+Shift+K** 手动搜索弹框，需要 Tern 0.8.3+ 和 Node.js 22+；这个手动弹框仅支持本地 pane。
+
+本地 checkout：
+
+```bash
+bun install
+bun run build
+tern plugin link ./packages/tern-context-broker
+tern plugin reload
+```
+
+本次改动合入后，可直接通过 GitHub URL 安装可选的 Tern 配套插件：
+
+```bash
+tern plugin install github.com/yoyooyooo/pi-context-broker/packages/tern-context-broker
+```
+
+GitHub 插件目录包含独立查询程序、依赖和许可声明，安装不需要 Bun、npm 发版或 GitHub Release 归档。配套插件负责手动搜索并编辑草稿；提交后的上下文注入由 OMP broker 负责。npm 发新版前，使用最新 broker 改动可构建本仓库，再按上面的 `-e ./packages/context-broker/src/index.ts` 启动 OMP。两者共用 `~/.omp/agent/context-broker/config.yml` 中的 roots/catalogs；查询不自动继承 OMP 系统提示中列出的 Skill。
+
+自定义 Node 路径、配置文件或 OMP profile，请在 `<Tern config>/plugin-data/context-broker/config.json` 设置可选字段 `node`、`config`、`agentDir`。macOS 默认 Tern config 为 `~/Library/Application Support/Tern`。键位可重绑 `plugin.context-broker.complete`。完整约定见 [Tern 包说明](./packages/tern-context-broker/README.md)。
 
 ## 快速开始
 
@@ -322,7 +353,7 @@ members:
 
 如果文件是 `SKILL.md`，Context Broker 可以从 frontmatter 读取 `name` 和 `description`。只有需要覆盖 metadata 时，才需要手写这两个字段。
 
-完整示例见 [`examples/discovery-catalog.example.yaml`](./examples/discovery-catalog.example.yaml)。
+完整示例见 [`discovery-catalog.example.yaml`](./packages/context-broker/examples/discovery-catalog.example.yaml)。
 
 ## 注入 payload
 
@@ -392,27 +423,44 @@ bun install
 bun run check
 bun run test:host
 bun run test:global-config
-npm pack --dry-run --json
+bun run test:lifecycle
+bun run test:release
+bun run test:artifacts
+bun run pack:dry
 ```
+
+仓库包含 `packages/context-broker`（npm 包 `pi-context-broker`）和 `packages/tern-context-broker`（Tern Luau 插件）。`bun run build` 将候选 CLI 打包到两个分发目录。修改源码时一并提交 Tern query 和 LICENSE，确保 GitHub URL 安装无需构建。`bun scripts/pack.mjs` 也可为可选发版生成 npm tarball 与 Tern 安装归档。
+
+CI 固定 OMP 18.10.3、Pi 1.2.0 和 Bun 1.3.14，运行代码、双宿主、生命周期、发布检查与独立产物回归。生命周期检查每次 provider 收到的正文份数，覆盖同进程重复、fork、回退、压缩保留/移除正文、持久续接以及 XML 示例后首次加载。
+
+macOS 上安装 Tern 0.8.3+ 后，先 `bun run build`，再执行 `bun run test:ui`。脚本从 Tern 安装归档独立安装，打开隔离窗口，验证自动胶囊、删除/撤销、多引用提交、去重、中文/emoji 手动替换、取消和焦点变化，保留截图与 provider 证据。
+
+需要真实模型验收时，显式执行 `bun run test:model`，复用已配置的登录，只调用 `magpie/group/flash-free`。它检查 Skill 专属输出、真实默认摘要压缩、正文移除后的再次注入，以及普通请求和摘要请求的实际模型 selector。真实模型与原生界面不在无凭据的 Linux CI 自动运行。所有验收脚本保留临时证据目录，供核对后移至系统废纸篓。
+
+接手项目的 agent 使用 [项目验证 Skill](.agents/skills/verify-context-broker/SKILL.md)，先读功能地图，再用 `node .agents/skills/verify-context-broker/scripts/control.mjs doctor editor` 检查环境，`run editor` 驱动原生界面。助手记录实际版本、命令、退出状态和保留证据路径；其他功能参数为 `injection`、`lifecycle`、`model`、`distribution`。修改入口后用 `/maintain-verification-skill` 同步地图。
+
+公开 CLI `context-broker-complete` 从 stdin 接收 version 1 JSON `{version:1,text,cursor,cwd,config?}`，stdout 返回 `{version:1,edit,items}`，偏移为 UTF-16 code units。`edit` 为 null 表示光标前无以 `$` 开始的补全前缀；前缀可以紧接正文。候选沿用 broker 的别名、模糊排序与 Bundle 优先规则。诊断写 stderr，不输出 Skill 正文。
+
 
 ### 发布流程
 
-配置 npm Trusted Publishing 后，用 tag 脚本发布：
+Tern GitHub URL 安装使用已提交的插件目录，不依赖 npm 发版。下面的 tag 流程用于发布 broker 的 npm 包，并可提供 Tern 归档。配置 npm Trusted Publishing 后：
 
 ```bash
 bun run release:check patch --no-push
 bun run release patch
 ```
 
-脚本会创建临时本地 release branch、更新 version files、提交、创建 tag、推送 tag，然后由 GitHub Actions 从该 tag 发布。
+脚本会创建临时本地 release branch、更新 version files，强制执行 `.github/release.config.json` 的 `checkCommand`，通过后再提交、创建 tag、推送 tag，由 GitHub Actions 运行全部发布门禁后发布。`--no-push` 同样执行检查；`release:check`（`--precheck`）和 `--dry-run` 只输出计划，不运行检查，也不创建发布。
 
 ### 首次手动发布
 
 配置 Trusted Publishing 之前，需要从真实 TTY 发布，让 npm 完成 2FA 或 web authentication：
 
 ```bash
+bun run build
 npm login --auth-type=web --registry https://registry.npmjs.org
-npm publish --access public --registry https://registry.npmjs.org --auth-type=web
+npm publish ./packages/context-broker --access public --registry https://registry.npmjs.org --auth-type=web
 ```
 
 Agent shell tools 通常不是 TTY，可能会因为 `EOTP` 失败。

@@ -10,6 +10,8 @@ $design-review review this API boundary
 
 The plugin finds `design-review`, injects the matching local `SKILL.md` or bundle index, and skips duplicate injections in the same active session branch.
 
+Deduplication checks the active branch's effective context. Completing and submitting the same record again produces an `already loaded` notice. A fork retaining the body still skips it; a rewind or compaction removing the body allows it to load again. XML examples in ordinary user, assistant or tool messages are not loading evidence. Deduplication prevents a second copy from being appended; the existing body still travels with the conversation context.
+
 ## The problem
 
 Agent setups collect useful context over time: review checklists, project runbooks, team workflows, provider notes, debugging recipes, and personal skills. Loading all of them at startup makes the prompt noisy. Asking the model to remember the right file is unreliable. Opening files by hand breaks flow.
@@ -21,7 +23,7 @@ It does not run a remote indexer, guess from embeddings, or load everything in t
 ## What you get
 
 - `$name` lookup for local skills and catalog records.
-- Pi interactive autocomplete for `$...` entries.
+- Pi and OMP interactive autocomplete dropdowns for `$...` entries.
 - Rule-based injection, such as `review this design` loading `design-review`.
 - Explicit `bundle:<name>` rule targets for keyword-triggered bundle indexes.
 - Bundle records for large context areas where the model should see an index before choosing a member.
@@ -58,12 +60,41 @@ OMP:
 omp install npm:pi-context-broker
 ```
 
+After installing, upgrading or changing OMP extension code, run `/restart` in the OMP composer to restart the process with the same launch flags and resume the current session. OMP 18.10.3 has no `/reload` command. `/reload-plugins` refreshes discovered Skills, commands, agents and MCP state without re-executing loaded extension code. `tern plugin reload` only reloads the Tern companion.
+
 Try a local checkout without installing:
 
 ```bash
-pi -e ./src/index.ts
-omp -e ./src/index.ts
+pi -e ./packages/context-broker/src/index.ts
+omp -e ./packages/context-broker/src/index.ts
 ```
+
+### Tern completion
+
+Type `$` or `$prefix` anywhere in the OMP composer to automatically show a caret-anchored Skill/Bundle dropdown using the same editor UI as `/` completion. The trigger can directly follow prose, and a draft can contain multiple references, such as `Use$design-review then$workspace-collab`. Keep typing to filter, use arrows to select, Tab or Enter to accept, and Esc to dismiss. Accepting only completes the draft; it does not submit it. The OMP broker provides this dropdown without the companion Tern plugin.
+
+Accepted candidates become native atomic chips with the same colors and editing behavior as `/skill:` chips, retaining `$name` to distinguish broker references. Backspace removes the whole chip and undo restores it. Submission expands chips back to `$name` so the broker loads every matching Skill or Bundle. Existing `/skill:` chips can coexist in the draft.
+
+Automatic OMP dropdowns require OMP 18.10.3+ and render beside the input in Tern. The optional Tern companion provides a manual search dialog on **Ctrl+Alt+Shift+K**, requiring Tern 0.8.3+ and Node.js 22+; that dialog supports local panes only.
+
+For a local checkout:
+
+```bash
+bun install
+bun run build
+tern plugin link ./packages/tern-context-broker
+tern plugin reload
+```
+
+Install the optional Tern companion directly from GitHub after this change is merged:
+
+```bash
+tern plugin install github.com/yoyooyooo/pi-context-broker/packages/tern-context-broker
+```
+
+The GitHub package includes the bundled query, dependencies and license notices; installation does not need Bun, an npm release or a GitHub Release archive. The companion adds manual search and edits the draft; the OMP broker handles injection when you submit. For the latest broker changes before an npm release, build this checkout and launch OMP with `-e ./packages/context-broker/src/index.ts` as shown above. Both components use configured roots/catalogs in `~/.omp/agent/context-broker/config.yml`; the query does not inherit Skills listed in OMP's system prompt.
+
+Override the Node executable, broker config or OMP profile with optional `node`, `config`, `agentDir` fields in `<Tern config>/plugin-data/context-broker/config.json`. Rebind `plugin.context-broker.complete` in Tern keyboard preferences. See the [Tern package guide](./packages/tern-context-broker/README.md).
 
 ## Quick start
 
@@ -328,7 +359,7 @@ members:
 
 When the file is a `SKILL.md`, Context Broker can read `name` and `description` from frontmatter. Set them manually only when you want to override that metadata.
 
-See [`examples/discovery-catalog.example.yaml`](./examples/discovery-catalog.example.yaml) for a fuller example.
+See [`discovery-catalog.example.yaml`](./packages/context-broker/examples/discovery-catalog.example.yaml) for a fuller example.
 
 ## Injected payloads
 
@@ -398,27 +429,44 @@ bun install
 bun run check
 bun run test:host
 bun run test:global-config
-npm pack --dry-run --json
+bun run test:lifecycle
+bun run test:release
+bun run test:artifacts
+bun run pack:dry
 ```
+
+The workspace contains `packages/context-broker` (npm `pi-context-broker`) and `packages/tern-context-broker` (Tern Luau). `bun run build` bundles the query into both distributions. Commit the Tern query and LICENSE with source changes so GitHub URL installations work without a build. `bun scripts/pack.mjs` also creates an npm tarball and a Tern installation archive for optional releases.
+
+CI pins OMP 18.10.3, Pi 1.2.0 and Bun 1.3.14, then runs code checks, both CLI hosts, lifecycle, release policy and independent artifact regressions. Lifecycle checks count the bodies actually received by the provider for repetition, fork, rewind, compaction retaining/removing bodies, persistent continuation and first loading after an XML example.
+
+On macOS with Tern 0.8.3+, run `bun run build` followed by `bun run test:ui`. The runner installs the Tern archive into an isolated runtime and verifies automatic chips, deletion/undo, multiple-reference submission, deduplication, Chinese/emoji manual replacement, cancellation and focus changes. Screenshots and provider evidence are retained.
+
+For explicit real-model acceptance, run `bun run test:model` using an existing login. It only calls `magpie/group/flash-free`, checking skill-specific output, the real default summarizer, reinjection after the body is removed, and model selectors on ordinary and summarizer transport requests. Real models and native UI are not run automatically in credential-free Linux CI. Verification scripts retain their temporary evidence directories for inspection and disposal through the system trash.
+
+Agents taking over this checkout should use the [project verification Skill](.agents/skills/verify-context-broker/SKILL.md). Read its feature map, run `node .agents/skills/verify-context-broker/scripts/control.mjs doctor editor`, then `run editor` for native UI. The helper records actual versions, commands, exit statuses and retained evidence paths; other feature arguments are `injection`, `lifecycle`, `model` and `distribution`. Use `/maintain-verification-skill` when entry points change.
+
+The public `context-broker-complete` CLI reads version 1 JSON `{version:1,text,cursor,cwd,config?}` on stdin and writes `{version:1,edit,items}` on stdout. Offsets use UTF-16 code units. A null edit means no `$` prefix ending at the cursor; the prefix can directly follow prose. Candidates reuse the broker's aliases, fuzzy ordering and Bundle precedence. Diagnostics go to stderr; Skill bodies are never returned.
+
 
 ### Release flow
 
-After npm Trusted Publishing is configured, create releases through the tag script:
+Tern GitHub URL installation uses the committed plugin directory and does not require an npm release. The following tag flow publishes the broker to npm and optionally provides a Tern archive. After npm Trusted Publishing is configured:
 
 ```bash
 bun run release:check patch --no-push
 bun run release patch
 ```
 
-The script creates a temporary local release branch, updates version files, commits, creates a tag, pushes the tag, and lets GitHub Actions publish from that tag.
+The script creates a temporary local release branch, updates version files, and requires the configured `.github/release.config.json` `checkCommand` to pass before committing, tagging and pushing. GitHub Actions runs all publication gates before publishing. `--no-push` still runs the check; `release:check` (`--precheck`) and `--dry-run` only print a plan without running checks or creating a release.
 
 ### First manual publish
 
 Before Trusted Publishing exists, publish from a real TTY so npm can complete 2FA or web authentication:
 
 ```bash
+bun run build
 npm login --auth-type=web --registry https://registry.npmjs.org
-npm publish --access public --registry https://registry.npmjs.org --auth-type=web
+npm publish ./packages/context-broker --access public --registry https://registry.npmjs.org --auth-type=web
 ```
 
 Agent shell tools are usually not a TTY and may fail with `EOTP`.

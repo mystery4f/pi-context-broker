@@ -33,7 +33,7 @@ jobs:
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.2.17
+          bun-version: 1.3.14
       - name: Set up Node
         uses: actions/setup-node@v6
         with:
@@ -42,14 +42,16 @@ jobs:
           package-manager-cache: false
       - name: Install dependencies
         run: bun install --frozen-lockfile
+      - name: Install pinned CLI hosts
+        run: npm install --global @oh-my-pi/pi-coding-agent@18.10.3 @earendil-works/pi-coding-agent@1.2.0
       - name: Validate release metadata
         run: |
           release_tag="${{ github.event.inputs.tag }}"
           if [ -z "$release_tag" ]; then
             release_tag="${GITHUB_REF_NAME}"
           fi
-          package_name="$(node -p "require('./package.json').name")"
-          package_version="$(node -p "require('./package.json').version")"
+          package_name="$(node -p "require('./packages/context-broker/package.json').name")"
+          package_version="$(node -p "require('./packages/context-broker/package.json').version")"
           expected_tag="v${package_version}"
           if [ "$package_name" != "pi-context-broker" ]; then
             echo "Expected package name pi-context-broker, got: $package_name" >&2
@@ -70,9 +72,19 @@ jobs:
           fi
       - name: Check
         run: bun run check
-      - name: Package dry run
-        run: npm pack --dry-run --json
+      - name: Release policy regression
+        run: node --test scripts/release.test.mjs
+      - name: Native CLI host regressions
+        run: |
+          node packages/context-broker/scripts/context-broker-host-e2e.mjs
+          node packages/context-broker/scripts/context-broker-global-config-e2e.mjs
+          node packages/context-broker/scripts/context-broker-lifecycle-e2e.mjs
+      - name: Installed artifact regression
+        run: node scripts/verify-artifacts.mjs --host omp
+      - name: Package release artifacts
+        run: bun scripts/pack.mjs
       - name: Publish
+        working-directory: packages/context-broker
         run: |
           if [ "${NPM_ALREADY_PUBLISHED:-false}" = "true" ]; then
             echo "${PACKAGE_NAME}@${PACKAGE_VERSION} is already on npm; skipping npm publish."
@@ -215,3 +227,4 @@ jobs:
           else
             gh release create "$RELEASE_TAG" --title "$RELEASE_TAG" --notes-file release-notes.md --verify-tag
           fi
+          gh release upload "$RELEASE_TAG" dist/tern-context-broker.tar.gz --clobber

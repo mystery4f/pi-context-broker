@@ -1,0 +1,82 @@
+{
+  "name": "pi-context-broker",
+  "version": "0.0.2",
+  "description": "Pi/OMP context broker that injects discoverable skills and lightweight bundles via explicit user commands.",
+  "type": "module",
+  "license": "MIT",
+  "packageManager": "bun@1.2.17",
+  "keywords": [
+    "pi-package",
+    "omp-package",
+    "pi",
+    "omp",
+    "context-broker",
+    "skill",
+    "bundle",
+    "autoload"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yoyooyooo/pi-context-broker.git",
+    "directory": "packages/context-broker"
+  },
+  "bugs": {
+    "url": "https://github.com/yoyooyooo/pi-context-broker/issues"
+  },
+  "homepage": "https://github.com/yoyooyooo/pi-context-broker#readme",
+  "files": [
+    "src",
+    "dist",
+    "examples",
+    "README.md",
+    "README.zh-CN.md",
+    "LICENSE",
+    "SECURITY.md",
+    "CHANGELOG.md",
+    "package.json"
+  ],
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  },
+  "omp": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  },
+  "bin": {
+    "context-broker-complete": "./dist/completion.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit && bun ../../scripts/build-tern.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "bun scripts/context-broker-smoke.mjs && tsc -p tsconfig.json --noEmit",
+    "test:host": "node scripts/context-broker-host-e2e.mjs",
+    "test:global-config": "node scripts/context-broker-global-config-e2e.mjs",
+    "check": "bun run test",
+    "pack:dry": "npm pack --dry-run --json"
+  },
+  "dependencies": {
+    "yaml": "^2.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "typescript": "^5.9.3"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@oh-my-pi/pi-coding-agent": "*"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    },
+    "@oh-my-pi/pi-coding-agent": {
+      "optional": true
+    }
+  }
+}
