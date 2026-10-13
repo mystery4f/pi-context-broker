@@ -3,7 +3,7 @@
   "remote": "origin",
   "tagPrefix": "v",
   "versionFiles": [
-    "package.json"
+    "packages/context-broker/package.json"
   ],
   "lockfiles": [
     "bun.lock"

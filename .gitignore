@@ -6,6 +6,12 @@ dist/
 build/
 out/
 *.tsbuildinfo
+packages/context-broker/README.md
+packages/context-broker/README.zh-CN.md
+packages/context-broker/LICENSE
+packages/context-broker/SECURITY.md
+packages/context-broker/CHANGELOG.md
+target/
 
 # Test / coverage
 coverage/

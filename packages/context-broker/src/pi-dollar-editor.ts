@@ -1,4 +1,5 @@
 import type { EditorFactory, EditorLike, ExtensionContext } from "./types";
+import { extractDollarAutocompletePrefix } from "./dollar";
 
 const FACTORY_MARKER = Symbol.for("context-broker.dollar-editor-factory");
 const EDITOR_MARKER = Symbol.for("context-broker.dollar-editor-instance");
@@ -26,7 +27,7 @@ function markEditor(editor: EditorLike): void {
 }
 
 export function isDollarAutocompleteContext(textBeforeCursor: string): boolean {
-  return /(?:^|[\s([{])\$[^\s$]*$/u.test(textBeforeCursor);
+  return extractDollarAutocompletePrefix(textBeforeCursor) !== undefined;
 }
 
 function shouldCheckAfterInput(data: string): boolean {

@@ -43,7 +43,8 @@ export type AutocompleteProvider = {
     lines: string[],
     cursorLine: number,
     cursorCol: number,
-    options: { signal: AbortSignal; force?: boolean },
+    options?: AbortSignal | { signal: AbortSignal; force?: boolean },
+    onPartial?: (suggestions: AutocompleteSuggestions) => void,
   ): Promise<AutocompleteSuggestions | null>;
   applyCompletion(
     lines: string[],
@@ -55,8 +56,13 @@ export type AutocompleteProvider = {
     lines: string[];
     cursorLine: number;
     cursorCol: number;
+    onApplied?: () => void;
   };
   shouldTriggerFileCompletion?(lines: string[], cursorLine: number, cursorCol: number): boolean;
+  getInlineHint?(lines: string[], cursorLine: number, cursorCol: number): string | null;
+  trySyncSlashCompletion?(textBeforeCursor: string): AutocompleteSuggestions | null;
+  trySyncInlineReplace?(textBeforeCursor: string): { replaceLen: number; insert: string } | null;
+  getForceFileSuggestions?(lines: string[], cursorLine: number, cursorCol: number, signal?: AbortSignal): Promise<AutocompleteSuggestions | null>;
 };
 
 export type SessionEntry = {

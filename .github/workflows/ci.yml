@@ -23,14 +23,25 @@ jobs:
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.2.17
+          bun-version: 1.3.14
       - name: Set up Node
         uses: actions/setup-node@v6
         with:
           node-version: 24
       - name: Install dependencies
         run: bun install --frozen-lockfile
+      - name: Install pinned CLI hosts
+        run: npm install --global @oh-my-pi/pi-coding-agent@18.10.3 @earendil-works/pi-coding-agent@1.2.0
       - name: Check
         run: bun run check
+      - name: Release policy regression
+        run: node --test scripts/release.test.mjs
+      - name: Native CLI host regressions
+        run: |
+          node packages/context-broker/scripts/context-broker-host-e2e.mjs
+          node packages/context-broker/scripts/context-broker-global-config-e2e.mjs
+          node packages/context-broker/scripts/context-broker-lifecycle-e2e.mjs
+      - name: Installed artifact regression
+        run: node scripts/verify-artifacts.mjs --host omp
       - name: Package dry run
-        run: npm pack --dry-run --json
+        run: bun run pack:dry

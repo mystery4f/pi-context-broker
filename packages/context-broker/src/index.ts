@@ -71,7 +71,7 @@ const DEFAULT_CONFIG_EXTENSIONS = [".yml", ".yaml", ".json"];
 const DEFAULT_RULE_ROOT_BASENAME = "rules";
 const RULE_FILE_EXTENSIONS = new Set(DEFAULT_CONFIG_EXTENSIONS);
 const DEFAULT_PATH_MODE: PathMode = "home-relative";
-const DOLLAR_SKILL_PATTERN = "(?:^|[\\s,，。.!！？?；;、:：([{（【])\\$(?<query>[^\\s$]+?)(?=$|[\\s,，。.!！？?；;、:：)）\\]】}])";
+const DOLLAR_SKILL_PATTERN = "\\$(?<query>[^\\s$]+?)(?=$|[\\s,，。.!！？?；;、:：)）\\]】}])";
 const DEFAULT_RULES: InvocationRule[] = [
   { id: "dollar-skill", match: [{ regex: [{ pattern: DOLLAR_SKILL_PATTERN, flags: "g" }] }] },
   { id: "skill-colon", match: [{ regex: [{ pattern: "^\\s*skill[:：]\\s*(?<query>.+?)\\s*$" }] }] },
@@ -649,13 +649,14 @@ function escapedPattern(value: string): string {
 }
 
 function messageTextIncludesRecordBlock(message: AgentMessage, record: DiscoveryRecord): boolean {
+  if (message.role !== "custom" || message.customType !== CUSTOM_TYPE) return false;
   const text = textFromContent(message.content);
   if (!text) return false;
   const namePatterns = [recordName(record), ...recordAliases(record)]
     .map(escapedPattern)
     .filter(Boolean);
   if (namePatterns.length === 0) return false;
-  return namePatterns.some((name) => new RegExp(`<context-broker-record\\s+[^>]*name="${name}"`, "i").test(text));
+  return namePatterns.some((name) => new RegExp(`<context-broker-record\\s+(?=[^>]*kind="${recordKind(record)}")(?=[^>]*name="${name}")[^>]*>`, "i").test(text));
 }
 
 function messageTextIncludesSkillBlock(message: AgentMessage, skill: SkillRecord): boolean {
@@ -1113,7 +1114,13 @@ export default function contextBroker(pi: ExtensionAPI): void {
     return promise;
   };
   pi.on("session_start", async (_event, ctx) => {
-    await installPiDollarAutocompleteEditor(ctx);
+    if (ctx.hasUI && (detectHost() === "omp" || !ctx.ui?.getEditorComponent)) {
+      // Platform-only adapter: Pi and the Node query cannot resolve OMP's host exports.
+      const { installOmpDollarAutocompleteEditor } = await import("./omp-dollar-editor");
+      await installOmpDollarAutocompleteEditor(ctx);
+    } else {
+      await installPiDollarAutocompleteEditor(ctx);
+    }
     ctx.ui?.addAutocompleteProvider?.((current) => createDollarSkillAutocompleteProvider(
       current,
       buildDollarRegistryForContext(ctx, getDollarRegistry(ctx.cwd)),

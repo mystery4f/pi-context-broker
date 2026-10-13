@@ -1,114 +1,12 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { isolatedEnv, preserveTemp, runCommand, writeFakeProvider } from "./context-broker-e2e-fixture.mjs";
 
 const repoRoot = resolve(import.meta.dirname, "..");
 const extensionPath = join(repoRoot, "src/index.ts");
-const HOST_TIMEOUT_MS = 20_000;
-
-function runCommand(file, args, options) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(file, args, {
-      cwd: options.cwd,
-      env: options.env,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    const stdout = [];
-    const stderr = [];
-    const timer = setTimeout(() => {
-      child.kill("SIGTERM");
-      setTimeout(() => child.kill("SIGKILL"), 500).unref?.();
-      reject(new Error(`${file} timed out after ${HOST_TIMEOUT_MS}ms: ${args.join(" ")}`));
-    }, HOST_TIMEOUT_MS);
-    timer.unref?.();
-
-    child.stdout.on("data", chunk => stdout.push(chunk));
-    child.stderr.on("data", chunk => stderr.push(chunk));
-    child.on("error", error => {
-      clearTimeout(timer);
-      reject(error);
-    });
-    child.on("close", code => {
-      clearTimeout(timer);
-      const result = {
-        stdout: Buffer.concat(stdout).toString("utf8"),
-        stderr: Buffer.concat(stderr).toString("utf8"),
-      };
-      if (code === 0) {
-        resolve(result);
-      } else {
-        const error = new Error(`${file} exited with code ${code}: ${args.join(" ")}`);
-        Object.assign(error, result, { code });
-        reject(error);
-      }
-    });
-  });
-}
-
-async function writeFakeProvider(base) {
-  const path = join(base, "fake-provider.mjs");
-  await writeFile(path, `
-function makeStream(model) {
-  const output = {
-    role: "assistant",
-    content: [{ type: "text", text: "OK" }],
-    api: model.api || "context-broker-config-e2e-api",
-    provider: model.provider || "context-broker-config-e2e",
-    model: model.id,
-    usage: {
-      input: 0,
-      output: 0,
-      cacheRead: 0,
-      cacheWrite: 0,
-      totalTokens: 0,
-      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-    },
-    stopReason: "stop",
-    timestamp: Date.now(),
-  };
-  const events = [
-    { type: "start", partial: output },
-    { type: "text_start", contentIndex: 0, partial: output },
-    { type: "text_delta", contentIndex: 0, delta: "OK", partial: output },
-    { type: "text_end", contentIndex: 0, content: "OK", partial: output },
-    { type: "done", reason: "stop", message: output },
-  ];
-  let sent = false;
-  return {
-    push() {},
-    end() {},
-    result: async () => output,
-    async *[Symbol.asyncIterator]() {
-      if (sent) return;
-      sent = true;
-      for (const event of events) yield event;
-    },
-  };
-}
-
-export default function fakeProvider(pi) {
-  pi.registerProvider("context-broker-config-e2e", {
-    name: "Context Broker Config E2E Fake Provider",
-    api: "context-broker-config-e2e-api",
-    apiKey: "fake",
-    baseUrl: "http://127.0.0.1",
-    streamSimple: makeStream,
-    models: [{
-      id: "fake",
-      name: "Fake",
-      input: ["text", "image"],
-      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-      contextWindow: 100000,
-      maxTokens: 4096,
-    }],
-  });
-}
-`);
-  return path;
-}
 
 async function writeSkill(skillRoot, dir, name, description, body) {
   const skillDir = join(skillRoot, dir);
@@ -140,7 +38,7 @@ async function findJsonlFiles(dir) {
     for (const entry of entries) {
       const child = join(path, entry.name);
       if (entry.isDirectory()) await walk(child);
-      else if (entry.isFile() && entry.name.includes(".jsonl")) result.push(child);
+      else if (entry.isFile() && entry.name.endsWith(".jsonl")) result.push(child);
     }
   }
   await walk(dir);
@@ -157,19 +55,13 @@ async function waitForJsonlFiles(dir, count, timeoutMs = 1500) {
   return files;
 }
 
-function cleanEnv(agentDir, logFile) {
-  const env = {
-    ...process.env,
-    HOME: dirname(agentDir),
-    PI_CODING_AGENT_DIR: agentDir,
+function cleanEnv(agentDir, logFile, providerContextFile) {
+  return isolatedEnv({
+    base: dirname(agentDir),
+    agentDir,
     CONTEXT_BROKER_LOG_FILE: logFile,
-  };
-  delete env.CONTEXT_BROKER_CONFIG;
-  delete env.CONTEXT_BROKER_ROOTS;
-  delete env.CONTEXT_BROKER_HOST;
-  delete env.CONTEXT_BROKER_REQUIRE_ENABLED;
-  delete env.CONTEXT_BROKER_DISCOVERY_CATALOGS;
-  return env;
+    CONTEXT_BROKER_E2E_PROVIDER_CONTEXT_FILE: providerContextFile,
+  });
 }
 
 function parseSessionEntries(text) {
@@ -191,6 +83,7 @@ async function runHost(host, tempRoot, fakeProviderPath) {
   const skillRoot = join(base, "skills");
   const sessionDir = join(base, "sessions");
   const logFile = join(base, "decisions.jsonl");
+  const providerContextFile = join(base, "provider-context.jsonl");
   await mkdir(join(configDir, "rules"), { recursive: true });
   await mkdir(sessionDir, { recursive: true });
 
@@ -208,6 +101,8 @@ async function runHost(host, tempRoot, fakeProviderPath) {
 
   const commonArgs = [
     "-p",
+    "--no-extensions",
+    "--no-skills",
     "--session-dir",
     sessionDir,
     "--no-tools",
@@ -216,15 +111,17 @@ async function runHost(host, tempRoot, fakeProviderPath) {
     "--extension",
     extensionPath,
     "--model",
-    "context-broker-config-e2e/fake",
+    "context-broker-e2e/fake",
     "--system-prompt",
     "Only output OK.",
   ];
-  if (host === "omp") commonArgs.splice(4, 0, "--no-title");
+  if (host === "omp") commonArgs.push("--no-title", "--no-rules");
 
-  const env = cleanEnv(agentDir, logFile);
+  const env = cleanEnv(agentDir, logFile, providerContextFile);
+  console.log(`${host} config e2e: configured rule print turn`);
   const first = await runCommand(host, [...commonArgs, "load first"], { cwd: base, env });
   assert.match(first.stdout, /OK/, `${host}: configured rule turn did not return OK`);
+  console.log(`${host} config e2e: continued dollar print turn`);
   const second = await runCommand(host, [...commonArgs, "--continue", "$second-context"], { cwd: base, env });
   assert.match(second.stdout, /OK/, `${host}: dollar turn did not return OK`);
 
@@ -237,7 +134,7 @@ async function runHost(host, tempRoot, fakeProviderPath) {
   assert.equal(logLines[1].record?.name, "second-context", `${host}: second decision target mismatch`);
 
   const sessionFiles = await waitForJsonlFiles(sessionDir, 1);
-  assert.ok(sessionFiles.length >= 1, `${host}: expected session file output`);
+  assert.equal(sessionFiles.length, 1, `${host}: expected one persistent session file`);
   const sessionText = (await Promise.all(sessionFiles.map((file) => readFile(file, "utf8")))).join("\n");
   const entries = contextBrokerEntries(parseSessionEntries(sessionText));
   assert.equal(entries.length, 2, `${host}: expected two context-broker custom messages`);
@@ -250,6 +147,14 @@ async function runHost(host, tempRoot, fakeProviderPath) {
   const secondDetails = entries[1].details ?? entries[1].message?.details ?? {};
   assert.equal(firstDetails.path, "~/skills/first/SKILL.md", `${host}: first path mismatch`);
   assert.equal(secondDetails.path, "~/skills/second/SKILL.md", `${host}: second path mismatch`);
+
+  const contexts = (await readFile(providerContextFile, "utf8")).trim().split("\n").map((line) => JSON.parse(line).context);
+  assert.equal(contexts.length, 2, `${host}: expected two provider captures`);
+  for (const [index, context] of contexts.entries()) {
+    const messages = JSON.stringify(context.messages);
+    assert.equal(messages.split("FIRST_CONTEXT_MARKER").length - 1, 1, `${host}: turn ${index + 1} must include first body exactly once`);
+    assert.equal(messages.split("SECOND_CONTEXT_MARKER").length - 1, index, `${host}: turn ${index + 1} second body count`);
+  }
 
   return { host, sessionFile: sessionFiles[0] };
 }
@@ -269,9 +174,5 @@ try {
     console.log(`${result.host} config e2e ok: ${result.sessionFile}`);
   }
 } finally {
-  if (process.env.CONTEXT_BROKER_KEEP_E2E_TEMP !== "1") {
-    await rm(tempRoot, { recursive: true, force: true });
-  } else {
-    console.log(`kept temp: ${tempRoot}`);
-  }
+  preserveTemp(tempRoot);
 }

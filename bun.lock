@@ -4,6 +4,17 @@
   "workspaces": {
     "": {
       "name": "pi-context-broker",
+      "devDependencies": {
+        "@types/node": "^22.15.0",
+        "typescript": "^5.9.3",
+      },
+    },
+    "packages/context-broker": {
+      "name": "pi-context-broker",
+      "version": "0.0.2",
+      "bin": {
+        "context-broker-complete": "./dist/completion.mjs",
+      },
       "dependencies": {
         "yaml": "^2.9.0",
       },
@@ -20,9 +31,17 @@
         "@oh-my-pi/pi-coding-agent",
       ],
     },
+    "packages/tern-context-broker": {
+      "name": "tern-context-broker",
+      "version": "0.1.0",
+    },
   },
   "packages": {
     "@types/node": ["@types/node@22.20.0", "", { "dependencies": { "undici-types": "~6.21.0" } }, "sha512-QWlFW2wf3nTjC13/DqRnBpR4ZO36VJH/JVBkA/vcnmbTBNQIlnObqyqZE1tUR7+Ni23Lda8R1BxMfbXRpCUx5g=="],
+
+    "pi-context-broker": ["pi-context-broker@workspace:packages/context-broker"],
+
+    "tern-context-broker": ["tern-context-broker@workspace:packages/tern-context-broker"],
 
     "typescript": ["typescript@5.9.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw=="],
 

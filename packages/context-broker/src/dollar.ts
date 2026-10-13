@@ -61,17 +61,14 @@ export async function buildDollarRegistryForContext(
 }
 
 export function extractDollarAutocompletePrefix(textBeforeCursor: string): string | undefined {
-  const match = textBeforeCursor.match(/(?:^|[\s([{])(\$[^\s$]*)$/u);
+  const match = textBeforeCursor.match(/(\$[^\s$]*)$/u);
   return match?.[1];
 }
 
 function endsAfterCompletedDollarToken(textBeforeCursor: string): boolean {
-  return /(?:^|[\s([{])\$[^\s$]+\s$/u.test(textBeforeCursor);
+  return /\$[^\s$]+\s$/u.test(textBeforeCursor);
 }
 
-function endsWithDollarLikeToken(textBeforeCursor: string): boolean {
-  return /\S*\$[^\s$]*$/u.test(textBeforeCursor);
-}
 
 function compactKey(value: string): string {
   return value.replace(/-/g, "");
@@ -186,17 +183,28 @@ export function createDollarSkillAutocompleteProvider(
   dollarRegistryPromise: Promise<DiscoveryRecord[]>,
 ): AutocompleteProvider {
   return {
-    async getSuggestions(lines, cursorLine, cursorCol, options) {
+    getInlineHint: current.getInlineHint?.bind(current),
+    trySyncSlashCompletion: current.trySyncSlashCompletion?.bind(current),
+    trySyncInlineReplace: current.trySyncInlineReplace?.bind(current),
+    async getForceFileSuggestions(lines, cursorLine, cursorCol, signal) {
+      if (extractDollarAutocompletePrefix((lines[cursorLine] ?? "").slice(0, cursorCol)) !== undefined) {
+        return this.getSuggestions(lines, cursorLine, cursorCol, signal);
+      }
+      return current.getForceFileSuggestions
+        ? current.getForceFileSuggestions(lines, cursorLine, cursorCol, signal)
+        : current.getSuggestions(lines, cursorLine, cursorCol, signal);
+    },
+    async getSuggestions(lines, cursorLine, cursorCol, options, onPartial) {
       const currentLine = lines[cursorLine] ?? "";
       const textBeforeCursor = currentLine.slice(0, cursorCol);
       if (endsAfterCompletedDollarToken(textBeforeCursor)) return null;
       const prefix = extractDollarAutocompletePrefix(textBeforeCursor);
-      if (prefix === undefined && endsWithDollarLikeToken(textBeforeCursor)) return null;
       if (prefix === undefined) {
-        return current.getSuggestions(lines, cursorLine, cursorCol, options);
+        return current.getSuggestions(lines, cursorLine, cursorCol, options, onPartial);
       }
       const registry = await dollarRegistryPromise;
-      if (options.signal.aborted) return null;
+      const signal = options && ("signal" in options ? options.signal : options);
+      if (signal?.aborted) return null;
       const items = dollarAutocompleteItems(registry, prefix.slice(1));
       if (items.length === 0) return null;
       return { items, prefix };

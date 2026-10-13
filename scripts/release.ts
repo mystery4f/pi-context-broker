@@ -13,8 +13,7 @@ type Config = {
   versionFiles: string[];
   lockfiles: string[];
   lockfileCommand: string[] | null;
-  checkCommand: string[] | null;
-  localCheckCommand?: string[] | null;
+  checkCommand: string[];
   commitMessage: string;
   publishMode: "none" | "npm";
   publishPackage: string | null;
@@ -28,7 +27,6 @@ type Options = {
   noPush: boolean;
   precheck: boolean;
   replaceFailedTag: boolean;
-  skipLocalCheck: boolean;
   versionArg: string;
 };
 
@@ -43,8 +41,8 @@ function main(): void {
   let originalBranch = "";
   let tempBranch = "";
   try {
-    const config = readConfig();
     const options = parseArgs(process.argv.slice(2));
+    const config = readConfig();
     ensureGitBase(config, options);
     if (options.noPush) {
       execCommand("git", ["fetch", config.remote, "--tags", "--prune-tags"], false);
@@ -75,9 +73,7 @@ function main(): void {
     if (Array.isArray(config.lockfileCommand) && config.lockfileCommand.length > 0) {
       run(config.lockfileCommand[0]!, config.lockfileCommand.slice(1));
     }
-    if (!options.skipLocalCheck && Array.isArray(config.localCheckCommand) && config.localCheckCommand.length > 0) {
-      run(config.localCheckCommand[0]!, config.localCheckCommand.slice(1));
-    }
+    run(config.checkCommand[0]!, config.checkCommand.slice(1));
 
     const addPaths = unique([...config.versionFiles, ...config.lockfiles]);
     run("git", ["add", ...addPaths]);
@@ -110,14 +106,16 @@ function readConfig(): Config {
   if (!Array.isArray(parsed.versionFiles) || parsed.versionFiles.length === 0) {
     fail("release config versionFiles must be a non-empty array");
   }
+  if (!Array.isArray(parsed.checkCommand) || parsed.checkCommand.length === 0 ||
+      parsed.checkCommand.some((part) => typeof part !== "string" || part.length === 0)) {
+    fail("release config checkCommand must be a non-empty array of non-empty strings");
+  }
   return {
     defaultBranch: "main",
     remote: "origin",
     tagPrefix: "v",
     lockfiles: [],
     lockfileCommand: null,
-    checkCommand: null,
-    localCheckCommand: null,
     commitMessage: "chore: release {tag}",
     publishMode: "npm",
     publishPackage: null,
@@ -126,6 +124,7 @@ function readConfig(): Config {
     releaseBranchPrefix: "release/",
     ...parsed,
     versionFiles: parsed.versionFiles,
+    checkCommand: parsed.checkCommand,
   };
 }
 
@@ -136,7 +135,6 @@ function parseArgs(args: string[]): Options {
     noPush: false,
     precheck: false,
     replaceFailedTag: true,
-    skipLocalCheck: false,
     versionArg: "",
   };
   const positional: string[] = [];
@@ -146,7 +144,6 @@ function parseArgs(args: string[]): Options {
     else if (arg === "--no-push") options.noPush = true;
     else if (arg === "--precheck") options.precheck = true;
     else if (arg === "--no-replace-failed-tag") options.replaceFailedTag = false;
-    else if (arg === "--skip-local-check") options.skipLocalCheck = true;
     else if (arg === "--help" || arg === "-h") {
       console.log(usage());
       process.exit(0);
@@ -168,7 +165,9 @@ function usage(): string {
   release <patch|minor|major|x.y.z> [--dry-run] [--precheck] [--no-push] [--allow-branch]
 
 Default model:
-  Creates a temporary local release branch, writes version files, commits, tags that commit, pushes tag only.
+  Creates a temporary local release branch, writes version files, runs the configured checkCommand,
+  then commits, tags that commit, and pushes tag only. --no-push still runs the check.
+  --dry-run and --precheck only print the plan; they do not run the check or create a release.
   If latest git tag is absent from npm, it is treated as a failed release and reused.`;
 }
 
@@ -307,6 +306,7 @@ function printPlan(
   replace failed tag: ${decision.reusingFailedTag ? "yes" : "no"}
   local branch: temporary ${config.releaseBranchPrefix}${tag}-<sha>
   pushes: ${options.noPush ? "none" : "tag only"}
+  check: ${formatCommand(config.checkCommand)} (not executed in this plan)
   main commit: no
   known tags: ${tagVersions.length}
 `);

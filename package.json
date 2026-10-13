@@ -1,76 +1,27 @@
 {
-  "name": "pi-context-broker",
-  "version": "0.0.2",
-  "description": "Pi/OMP context broker that injects discoverable skills and lightweight bundles via explicit user commands.",
+  "name": "context-broker-workspace",
+  "private": true,
   "type": "module",
-  "license": "MIT",
   "packageManager": "bun@1.2.17",
-  "keywords": [
-    "pi-package",
-    "omp-package",
-    "pi",
-    "omp",
-    "context-broker",
-    "skill",
-    "bundle",
-    "autoload"
-  ],
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/yoyooyooo/pi-context-broker.git"
-  },
-  "bugs": {
-    "url": "https://github.com/yoyooyooo/pi-context-broker/issues"
-  },
-  "homepage": "https://github.com/yoyooyooo/pi-context-broker#readme",
-  "files": [
-    "src",
-    "examples",
-    "README.md",
-    "README.zh-CN.md",
-    "LICENSE",
-    "SECURITY.md",
-    "CHANGELOG.md",
-    "package.json"
-  ],
-  "pi": {
-    "extensions": [
-      "./src/index.ts"
-    ]
-  },
-  "omp": {
-    "extensions": [
-      "./src/index.ts"
-    ]
-  },
+  "workspaces": ["packages/*"],
   "scripts": {
-    "build": "tsc -p tsconfig.json --noEmit",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "bun scripts/context-broker-smoke.mjs && tsc -p tsconfig.json --noEmit",
-    "test:host": "bun scripts/context-broker-host-e2e.mjs",
-    "test:global-config": "bun scripts/context-broker-global-config-e2e.mjs",
-    "check": "bun run test",
-    "pack:dry": "npm pack --dry-run --json",
+    "build": "bun run --cwd packages/context-broker typecheck && bun scripts/build-tern.mjs",
+    "typecheck": "bun run --cwd packages/context-broker typecheck",
+    "check": "bun run build && bun run --cwd packages/context-broker check && bun packages/context-broker/scripts/completion.test.ts",
+    "test": "bun run check",
+    "test:host": "bun run --cwd packages/context-broker test:host",
+    "test:global-config": "bun run --cwd packages/context-broker test:global-config",
+    "test:lifecycle": "node packages/context-broker/scripts/context-broker-lifecycle-e2e.mjs",
+    "test:artifacts": "node scripts/verify-artifacts.mjs --host omp",
+    "test:release": "node --test scripts/release.test.mjs",
+    "test:ui": "node scripts/verify-native-ui.mjs",
+    "test:model": "node scripts/verify-real-model.mjs",
+    "pack:dry": "bun scripts/pack.mjs --dry-run",
     "release": "bun scripts/release.ts",
     "release:check": "bun scripts/release.ts --precheck"
-  },
-  "dependencies": {
-    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",
     "typescript": "^5.9.3"
-  },
-  "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "*",
-    "@oh-my-pi/pi-coding-agent": "*"
-  },
-  "peerDependenciesMeta": {
-    "@earendil-works/pi-coding-agent": {
-      "optional": true
-    },
-    "@oh-my-pi/pi-coding-agent": {
-      "optional": true
-    }
   }
 }
