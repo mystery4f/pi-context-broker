@@ -33,6 +33,7 @@ Preconditions:
 
 ## Gotchas
 
+- 双插件共存验收使用同一 Tern/OMP 实例：OMP 扩展提供自动下拉和注入，Tern 配套插件只执行手动草稿编辑。自动下拉与手动弹框没有显式互斥；现有手动路径先 Esc 关闭自动候选，未覆盖两个菜单同时打开，不得将共存通过写成任何操作顺序都无冲突。
 - UI runner 的确认仅覆盖 Tab 自动接受；用户支持的方向选择、Enter 接受或纯 OMP TUI 若被修改，需补驱动，不能由本路径代替。
 - 手动搜索使用配置 roots/catalogs，不继承 system prompt 中隐藏的 Skill。
 - 当前脚本用 `What are we cooking?` 判断空 composer；宿主文案变化时先检查实际 idle 状态，不因超时就修改业务断言。

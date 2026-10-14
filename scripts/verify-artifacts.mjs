@@ -27,6 +27,30 @@ async function runtimePath(directory, entry) {
   assert.ok((await stat(path)).isFile(), `Runtime entry is not a file: ${entry}`);
   return path;
 }
+async function verifyDocumentLinks(directory, entries) {
+  const pending = [...entries];
+  const visited = new Set();
+  while (pending.length > 0) {
+    const entry = pending.pop();
+    const file = await runtimePath(directory, entry);
+    if (!entry.endsWith(".md") || visited.has(file)) continue;
+    visited.add(file);
+    const document = await readFile(file, "utf8");
+    for (const match of document.matchAll(/\[[^\]]*\]\(([^)\s]+)\)/g)) {
+      const [target, fragment] = match[1].split("#");
+      if (/^[a-z][a-z\d+.-]*:/i.test(target)) continue;
+      const destination = target ? resolve(dirname(file), decodeURIComponent(target)) : file;
+      const local = relative(directory, destination);
+      await runtimePath(directory, local);
+      if (fragment) {
+        const contents = await readFile(destination, "utf8");
+        const anchors = [...contents.matchAll(/^#{1,6}\s+(.+)$/gm)].map(heading => heading[1].toLowerCase().replace(/[^\p{L}\p{N}_\-\s]/gu, "").replace(/\s/g, "-"));
+        assert.ok(anchors.includes(decodeURIComponent(fragment)), `Missing documentation anchor: ${entry} -> ${match[1]}`);
+      }
+      pending.push(local);
+    }
+  }
+}
 const output = join(base, "archives");
 run(process.execPath, [join(root, "scripts/pack.mjs"), "--out-dir", output], { cwd: root, stdio: "inherit" });
 const archives = await readdir(output);
@@ -43,6 +67,8 @@ const manifest = JSON.parse(await readFile(join(installed, "package.json"), "utf
 assert.ok(manifest.pi?.extensions?.length);
 assert.ok(manifest.omp?.extensions?.length);
 for (const entry of [...manifest.pi.extensions, ...manifest.omp.extensions, ...Object.values(manifest.bin)]) await runtimePath(installed, entry);
+await verifyDocumentLinks(installed, ["README.md", "README.zh-CN.md", "docs/reference.md", "docs/reference.zh-CN.md", "CONTRIBUTING.md"]);
+await verifyDocumentLinks(ternExtract, ["README.md", "README.zh-CN.md"]);
 run("npm", ["install", "--omit=dev", "--ignore-scripts", "--legacy-peer-deps", "--package-lock=false", "--no-audit", "--no-fund"], { cwd: installed, stdio: "inherit" });
 
 const skillRoot = join(base, "skills");
@@ -105,4 +131,4 @@ for (const executable of [npmQuery, ternQuery]) {
   assert.equal(bad.status, 1, "Query must reject a split UTF-16 surrogate pair");
   assert.match(bad.stderr, /surrogate/i);
 }
-console.log(`Artifact verification passed: npm production install, unpacked OMP two-turn provider context, npm and Tern independent Node queries, Tern runtime closure. Fixtures retained: ${base}`);
+console.log(`Artifact verification passed: bilingual documentation navigation, npm production install, unpacked OMP two-turn provider context, npm and Tern independent Node queries, Tern runtime closure. Fixtures retained: ${base}`);

@@ -14,7 +14,7 @@ bun install --frozen-lockfile
 bun run build
 ```
 
-构建成功应输出 `Built standalone broker query and Tern plugin query`，产物包括 `packages/context-broker/dist/completion.mjs` 与 `packages/tern-context-broker/query/completion.mjs`。依赖已安装且当前改动已构建时不重复安装或构建。构建会更新分发用 README/CHANGELOG 投影，不把这些生成文件当成另一个文档来源。
+构建成功应输出 `Built standalone broker query and Tern plugin query`，产物包括 `packages/context-broker/dist/completion.mjs` 与 `packages/tern-context-broker/query/completion.mjs`。依赖已安装且当前改动已构建时不重复安装或构建。构建会更新根 README/CONTRIBUTING/SECURITY/CHANGELOG 的 npm 分发投影，不把生成副本当成另一个文档来源；broker 双语参考在 `packages/context-broker/docs` 直接维护，Tern 双语指南随 GitHub 目录与归档分发。
 
 本项目没有独立常驻服务器。CLI harness 每次创建临时 HOME、agentDir、sessionDir，加载仓库扩展，在 Pi/OMP 的 print 或 RPC 模式提交真实 prompt。启动器会在 HOME 隔离前解析 Volta 的真实入口，再用 Node 执行 Node CLI；不要把 HOME 改回用户目录来绕过启动问题。
 

@@ -7,6 +7,7 @@
 - `package-runtime`：npm tarball 解包、生产依赖安装后能加载 OMP 扩展，连续请求正文各一份。
 - `package-query`：npm/Tern 两个独立 Node 查询程序能解析中文 alias、UTF-16 编辑范围且不返回 Skill 正文。
 - `package-closure`：Tern manifest、Luau 相对依赖和 bundled query 都在归档中。
+- `package-docs`：npm/Tern 双语 README、broker 参考和贡献指南的本地链接与章节锚点在解包后可达。
 - `release-gate`：检查失败阻止 commit/tag/push；成功且 `--no-push` 只产生本地 tag；规划模式不执行检查。
 - `package-desktop`：独立 Tern 插件安装后的实际界面由 [编辑器地图](editor.md) 覆盖。
 
@@ -25,6 +26,7 @@ Preconditions:
 
 - **完整路径。** 运行 `node .agents/skills/verify-context-broker/scripts/control.mjs run distribution`。先打包到临时 archives，解包 npm/Tern，npm 只安装生产依赖且跳过 install scripts/peer 自动安装。解包后的 OMP 两次真实 prompt，provider 中正文都恰好一份。
 - **独立查询。** 两份 query 从仓库外独立 Node 进程接收 `中文😀\n使用 $架构 tail`，返回 `$design-review` 与正确 UTF-16 from/to/len；结果无私有 body marker；拆开 emoji surrogate 的 cursor 以非零退出。
+- **文档导航。** 解包后从 npm 的双语 README、双语参考和贡献指南、Tern 的双语 README 递归检查本地链接与标题锚点，防止下沉文档漏包或投影仍指向 workspace。线上链接与实际 Markdown 呈现需另行核对，不由文件存在替代。
 - **发布行为。** 同一命令执行 `node --test scripts/release.test.mjs`。它创建临时 repo 与本地 bare remote、受控 registry 回复及检查命令，观察 commit count、tag、remote refs、拒绝 push 的 hook。检查失败无发布 refs；成功 `--no-push` 有正确版本的 annotated tag，原 main 不变；规划模式未执行 gate。
 - **证据。** manifest 指向 `broker-artifacts-*`，含 `archives`、`npm/package`、`tern`、`provider.jsonl` 和 session；release tests 的各个 `pi-context-broker-release-*` 保存 repo/remote.git 与 gate.json。transcript 保留所有断言结果，完成后执行 `control.mjs evidence`。
 - **桌面安装。** 本路径仅检查 Tern 文件完整与查询能力；需要证明真实插件装入窗口并能交互时再执行 `run editor`。

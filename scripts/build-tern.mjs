@@ -26,11 +26,13 @@ for (const path of [join(broker, "dist/completion.mjs"), join(tern, "query/compl
   await writeFile(path, code);
   await chmod(path, 0o755);
 }
-for (const name of ["README.md", "README.zh-CN.md", "LICENSE", "SECURITY.md", "CHANGELOG.md"]) {
+for (const name of ["README.md", "README.zh-CN.md", "CONTRIBUTING.md", "LICENSE", "SECURITY.md", "CHANGELOG.md"]) {
   const contents = await readFile(join(root, name), "utf8");
   const projected = contents
     .replaceAll("./packages/context-broker/examples/", "./examples/")
-    .replaceAll("./packages/tern-context-broker/README.md", "https://github.com/yoyooyooo/pi-context-broker/tree/main/packages/tern-context-broker#readme")
+    .replaceAll("./packages/context-broker/docs/", "./docs/")
+    .replaceAll("./packages/tern-context-broker/README.md", "https://github.com/yoyooyooo/pi-context-broker/blob/main/packages/tern-context-broker/README.md")
+    .replaceAll("./packages/tern-context-broker/README.zh-CN.md", "https://github.com/yoyooyooo/pi-context-broker/blob/main/packages/tern-context-broker/README.zh-CN.md")
     .replaceAll("(.agents/skills/verify-context-broker/SKILL.md)", "(https://github.com/yoyooyooo/pi-context-broker/tree/main/.agents/skills/verify-context-broker/SKILL.md)");
   await writeFile(join(broker, name), projected);
 }

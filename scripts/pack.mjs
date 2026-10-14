@@ -18,6 +18,6 @@ const npm = spawnSync("npm", ["pack", "--ignore-scripts", "--json", ...(dry ? ["
 });
 if (npm.status !== 0) process.exit(npm.status ?? 1);
 if (!dry) {
-  const archive = spawnSync("tar", ["-czf", join(out, "tern-context-broker.tar.gz"), "-C", join(root, "packages/tern-context-broker"), "plugin.toml", "window.luau", "composer.luau", "query", "README.md", "LICENSE"], { stdio: "inherit" });
+  const archive = spawnSync("tar", ["-czf", join(out, "tern-context-broker.tar.gz"), "-C", join(root, "packages/tern-context-broker"), "plugin.toml", "window.luau", "composer.luau", "query", "README.md", "README.zh-CN.md", "LICENSE"], { stdio: "inherit" });
   if (archive.status !== 0) process.exit(archive.status ?? 1);
 }

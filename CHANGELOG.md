@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Shorten the bilingual project entrypoints, move detailed broker configuration into bundled package references, and make the bilingual Tern package guides own installation, profiles, updates and local development. Include documentation link targets and both Tern languages in distribution artifacts.
+- Document OMP/Tern plugin coexistence, sole ownership of injection by the OMP broker, and the verified Esc-then-shortcut sequence for switching to manual search; simultaneous menus are not covered.
 - Split the repository into independently distributable Pi/OMP and Tern packages. Preserve the npm name `pi-context-broker` and move local extension entry paths under `packages/context-broker`.
 - Add a standalone JSON completion CLI shared with the Tern distribution, preserving Skill/Bundle discovery and ranking.
 - Add an optional Tern native search dialog on Ctrl+Alt+Shift+K with UTF-16 draft replacement, stale-draft cancellation, and a bundled query requiring Node.js 22+. The dialog does not submit prompts.
