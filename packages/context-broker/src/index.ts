@@ -951,7 +951,9 @@ async function invokeBeforeAgentStart(
   config: ConfigFile,
   dollarRegistryPromise: Promise<DiscoveryRecord[]> = Promise.resolve([]),
 ): Promise<BeforeAgentStartResult | undefined> {
-  const requests = parseInvocations(event.prompt, configuredRules(config));
+  const prompt = typeof event.prompt === "string" ? event.prompt : "";
+  if (!prompt) return undefined;
+  const requests = parseInvocations(prompt, configuredRules(config));
   if (requests.length === 0) return undefined;
   const registry = await registryPromise;
   const dollarRegistry = requests.some((request) => request.scope === "global" || request.scope === "catalog")
