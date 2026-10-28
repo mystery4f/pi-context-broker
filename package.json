@@ -4,6 +4,9 @@
   "type": "module",
   "packageManager": "bun@1.2.17",
   "workspaces": ["packages/*"],
+  "pi": {
+    "extensions": ["./packages/context-broker/src/index.ts"]
+  },
   "scripts": {
     "build": "bun run --cwd packages/context-broker typecheck && bun scripts/build-tern.mjs",
     "typecheck": "bun run --cwd packages/context-broker typecheck",
